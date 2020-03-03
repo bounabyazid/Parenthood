@@ -6,6 +6,14 @@ Created on Wed Feb 27 04:46:24 2020
 
 @author: Yazid BOUNAB
 """
+
+import random
+import sys
+import time
+import datetime
+import re
+import requests
+
 import pickle
 from urllib.request import urlopen
 from bs4 import BeautifulSoup
@@ -29,125 +37,237 @@ Ontology = {
 'adolescents' : ['Nuoret', 'nuorista', 'nuoriin', 'nuorilta', 'nuorille', 'nuorina', 'nuoriksi'],
 'Childhood' : ['Lapsuus', 'lapsuudesta', 'lapsuuteen', 'lapsuudesta', 'lapsuudelle', 'lapsuutena', 'lapsuudeksi']}
 
-def getSectins():
-    soup = BeautifulSoup(urlopen(BaseLink+Section), 'lxml')
-    MainMenu = soup.find('nav')
-    Sectins = {}
+BASE_URL = 'http://www.vauva.fi'
+TOPIC_LIST_URL = BASE_URL + '/keskustelu/alue/{subforum}?page={page}'
+
+class ScrapeVauva:
+      def __init__(self):
+          self.url = BASE_URL
+          self.Sections = {}
+      
+      def getSectins(self):
+          soup = BeautifulSoup(urlopen(BaseLink+Section), 'lxml')
+          MainMenu = soup.find('nav')
     
-    for SubMenu in MainMenu.find('ul', class_='menu').find_all('li'):
-        #print(SubMenu,'\n___________________________')
-        title = SubMenu.find('a', class_='menu__link').text
-        link = SubMenu.find('a', class_='menu__link')['href']
-        Sectins[title] = {'link':link, 'Discussions':{}}
+          for SubMenu in MainMenu.find('ul', class_='menu').find_all('li'):
+              #print(SubMenu,'\n___________________________')
+              title = SubMenu.find('a', class_='menu__link').text
+              link = SubMenu.find('a', class_='menu__link')['href']
+              self.Sections[title] = {'link':link, 'Discussions':{}}
         
-    return Sectins
-
-def getMenu():
-    soup = BeautifulSoup(urlopen('https://www.vauva.fi/keskustelu/alue/aihe_vapaa'), 'lxml')
-    MainMenu = soup.find('div', class_='discussion-sections-list')
-    Sectins = {}
-    
-    for SubMenu in MainMenu.find('ul').find_all('li'):
-        title = SubMenu.find('a').text
-        link = SubMenu.find('a')['href']
-        Sectins[title] = {'link':link, 'Discussions':{}}
+      def getDebateMenu(self):
+          soup = BeautifulSoup(urlopen('https://www.vauva.fi/keskustelu/alue/aihe_vapaa'), 'lxml')
+          MainMenu = soup.find('div', class_='discussion-sections-list')
+   
+          for SubMenu in MainMenu.find('ul').find_all('li'):
+              title = SubMenu.find('a').text
+              link = SubMenu.find('a')['href']
+              self.Sections[title] = {'link':link, 'Discussions':{}}
         
-    return Sectins
+      def get_page_count(self,url):
+          page_number = 1
+          while True:
+                link = url + '?page=' + str(page_number)
+                if requests.get(link).status_code != 200:
+                   return page_number
+                else:
+                    page_number += 1
 
-def getReplyofReplay(element):
-    Replies = []
-    elements = element.find_all('p')
-    for elem in elements:
-        Replies.append(elem.text)
-        Replies.extend(getReplyofReplay(elem))
-    return list(set(Replies))
+      def convert_to_soup(html):
+          return BeautifulSoup(html, 'html.parser')
 
-def getReplies(link):
-    Replies = []
-    print(link)
-    soup = BeautifulSoup(urlopen(link), 'lxml')
-    Table = soup.find('section', class_='ThreadComments__ThreadCommentsContainer-xoykri-1 bBdsfj')
-    Table = Table.find('ul', class_='ThreadComments__CommentsList-xoykri-3 fPfGZn')
-    for replay in Table.find_all('li'):
-        Replies.append(replay.find('p').text)
-        Replies.extend(getReplyofReplay(replay))
-    return list(set(Replies))
+      def remove_attributes(soup):
+          for tag in soup.findAll(True):
+              tag.attrs = {}
+          return soup
 
-def getPage(PageNumber):
-    page = {}
-    Discussions = []
-    link = BaseLink+'/'+Section+'?page='+PageNumber
-    soup = BeautifulSoup(urlopen(link), 'lxml')
-    Table = soup.find('div', class_='row threads-list-container')
-    
-    page['page'+PageNumber] = []    
-    for Discussion in Table.find_all('li', class_='thread-list-item thread-list-item-small'):
-        Data = {}
-        
-        Data['Title'] = Discussion.find('div', class_='thread-list-item-title text-overflow').text
-        Data['Link'] = Discussion.find('a', class_='thread-list-item-container')['href']
-        Data['Date'] = Discussion.find('div', class_='thread-list-item-timestamp text-secondary text-bold-2 smaller pull-right').text
-        Data['Text'] = Discussion.find('div', class_='thread-list-item-body text-black text-overflow').text
-        Data['Replies'] = getReplies(Data['Link'])
-        
-        Discussions.append(Data)
+      def get_sleep_time():
+          return random.randrange(100, 221) / 1000
 
-    return Discussions
+      def fetch_page_as_soup(topic_url, page_number):
+          url = topic_url + '?page=' + str(page_number)
+          print('fetching ' + url)
+          response = requests.get(url)
+          if response.status_code == 200:
+             return convert_to_soup(response.text)
+          return None
 
-def getAllPages(BaseLink,Section,pages):
-    Sections = getSectins()
-    for Section in Sections:
-        soup = BeautifulSoup(urlopen(BaseLink+Section), 'lxml')
-        
-        
-def getAllText(pages):
-    AllText = []
-    NbPages = 88
-    for PageNumber in range(1,NbPages+1):
-        for Discution in pages['page'+str(PageNumber)]:
-            AllText.append(Discution['Title'])
-            AllText.append(Discution['Text'])
-            AllText.extend(Discution['Replies'])
-    
-    return AllText
 
-def getCommentaboutRussia():
-    RusiaComments = []
-    EnglishComments = []
-    pickle_in = open('Fish and SeaFood.pkl',"rb")
-    pages = pickle.load(pickle_in)
-    AllText = getAllText(pages)
-    
-    translator = Translator()
+class Post:
+      def __init__(self, name, age):
+          self.name = name
+          self.age = age
 
-    for Text in AllText:
-        if any(item in Text for item in Russialist):
-           RusiaComments.append(Text)
-           EnglishComments.append(translator.translate(Text).text)
-    
-    return RusiaComments, EnglishComments
+      def fetch_page_as_soup(topic_url, page_number):
+          url = topic_url + '?page=' + str(page_number)
+          print('fetching ' + url)
+          response = requests.get(url)
+          if response.status_code == 200:
+             return convert_to_soup(response.text)
+          return None
+      
+      def parse_post_timestamp(self, post_soup):
+          container = post_soup.find('div', {'class': 'field-name-post-date'})
+          timestamp_str = container.find('div', {'class': 'field-item'}).contents[0]
+          return datetime.strptime(timestamp_str, PostParser.VAUVA_DATETIME_FORMAT)
 
-def Sentiments(TargetTextList):
-    'https://medium.com/@himanshu_23732/sentiment-analysis-with-afinn-lexicon-930533dfe75b'
-    af = Afinn(language='fi',emoticons=True)
+      def remove_quotations(self, post_content):
+          for quote in post_content.find_all('blockquote'):
+              quote.replaceWith('')
+          return post_content
 
-    sentiment_scores = [af.score(comment) for comment in TargetTextList[0:10]]
-    
-    return sentiment_scores
-    
-Sections = getMenu()
-#pages = {}
-#
-#pickle_in = open('Fish and SeaFood.pkl',"rb")
-#pages = pickle.load(pickle_in)
+      def remove_linefeeds(self, post_content):
+          return post_content.replace('\n', ' ')
 
-#getAllPages(BaseLink,Section,pages)
-#
-#pickle_out = open("Fish and SeaFood.pkl","wb")
-#pickle.dump(pages, pickle_out)
-#pickle_out.close()
+      def purify_content(self, post_content_soap):
+          post_content_soap = utilities.remove_attributes(post_content_soap)
+          post_content_soap = self.remove_quotations(post_content_soap)
 
-#AllText = getAllText(pages)
-#sentiment_scores = Sentiments()
+          # Replace br-tags with linefeeds
+          for br in post_content_soap.find_all('br'):
+              br.replace_with('\n')
 
-#RusiaComments, EnglishComments = getCommentaboutRussia()
+          post_content = post_content_soap.get_text()
+          post_content = self.remove_linefeeds(post_content)
+
+          # Remove multiple whitespaces
+          post_content = re.sub('\s+', ' ', post_content).strip()
+          return post_content
+
+      def parse_post_content(self, post_soup):
+          container = post_soup.find('div', {'class': PostParser.CONTENT_CLASSES})
+          if container is None:
+             return
+
+          post_content_soap = container.find('div', {'class': 'field-item'})
+          post_content = self.purify_content(post_content_soap)
+          return post_content
+
+      def parse_posts(self, sanoma_comment_soups):
+          posts = []
+          for sanoma_comment_soup in sanoma_comment_soups:
+              content = self.parse_post_content(sanoma_comment_soup)
+              if not content:
+                 # No need to store empty posts
+                 continue
+
+              post_time = self.parse_post_timestamp(sanoma_comment_soup)
+              posts.append({
+                'content': content,
+                'post_time': post_time,
+                })
+
+          return posts
+
+      def parse_topic(self, pages):
+          sanoma_comment_soups = []
+          for page in pages:
+              page_soup = utilities.convert_to_soup(page)
+              sanoma_comment_soups += page_soup.find_all('div', {'class': 'sanoma-comment'})
+          return self.parse_posts(sanoma_comment_soups)
+
+      def add_topic_id_post_numbers(self, topic_id, posts):
+          for i, post in enumerate(posts):
+              post['topic_id'] = topic_id
+              post['post_number'] = i+1
+          return posts
+
+class Topic:
+      def __init__(self, url):
+          self.url = url
+          self.BASE_URL = 'https://www.vauva.fi'
+          self.TOPIC_LIST_URL = BASE_URL + '/keskustelu/alue/{subforum}?page={page}'
+          
+      def GetTopic(self,url):
+          soup = BeautifulSoup(urlopen(url), 'lxml')
+#          print(soup)
+          html = soup.find('article', class_=re.compile('^node node-discussion-topic'))
+          Post = {'title':html.find('h3', class_='comment-title')}
+          
+          S = html.find('div', class_='sanoma-comment')
+          Post['user'] = S.find('div', class_='wrapper').text
+          Post['time'] = S.find('div', class_='field-item even').text
+          Post['text'] = S.find('p').get_text()
+          
+#          for row in Table.find_all('div', class_=re.compile("^row odd" or "^row even")):
+#              print('\n___________________________')
+#              link = row.find('a')['href']
+#              #title = row.find('span', class_='title').text
+#              print(link)
+#              Dict = self.GetTopic(self,BASE_URL+link)
+          return Post
+      
+      def ParseTopic(self):
+          return None
+      
+      def GetTopics(self,url):
+          Posts = []
+          soup = BeautifulSoup(urlopen(url), 'lxml')
+          Table = soup.find('div', class_='region main').find('div',class_='view-content ds-view-content')
+          'title,Votes,Replies,Last'
+          for row in Table.find_all('div', class_=re.compile("^row odd" or "^row even")):
+              print('\n___________________________')
+              link = BASE_URL+row.find('a')['href']
+              #title = row.find('span', class_='title').text
+              print(link)
+              Posts.append(self.GetTopic(self,link))
+          return Posts
+      
+      def get_page_count(self, topic_soup):
+          last_page_bullet = topic_soup.find('li', {'class': 'pager-last last'})
+          if last_page_bullet is not None:
+              return int(last_page_bullet.a.contents[0])
+          return 1
+      
+      def get_topics(page, subforum):
+          topic_list_url = TOPIC_LIST_URL.format(subforum=subforum, page=page)
+          print('Fetching ' + topic_list_url)
+          topic_list_response = requests.get(topic_list_url)
+
+          if topic_list_response.status_code != 200:
+             return []
+
+          topics = []
+          topic_list_soup = utilities.convert_to_soup(topic_list_response.text)
+
+          for topic in topic_list_soup.find_all('span', {'class': 'title'}):
+              topic_url = get_topic_url(topic)
+              topics.append({
+                      'url': BASE_URL + topic_url,
+                      'title': topic.a.contents[-1]
+                      })
+
+          return topics
+
+      def get_topic_pages(self):
+          pages = []
+          first_page_soup = fetch_page_as_soup(self.url, 0)
+          if not first_page_soup:
+             return []
+          content = get_page_content(self, first_page_soup)
+          pages.append({'page_number': 0, 'content': content})
+
+          page_count = self.get_page_count(first_page_soup)
+
+          for page_number in range(1, page_count):
+              page_soup = fetch_page_as_soup(self.url, page_number)
+              if not page_soup:
+                 # Content couldn't be fetched
+                 return []
+              content = get_page_content(page_soup)
+              pages.append({'page_number': page_number, 'content': content})
+              # Tryin' to be polite
+              time.sleep(get_sleep_time())
+          return pages
+      
+def Scraping():
+    #T = Topic('https://www.vauva.fi/keskustelu/alue/aihe_vapaa?page=2')
+    SV = ScrapeVauva()
+    SV.url = 'https://www.vauva.fi/keskustelu/alue/aihe_vapaa'
+    #print(SV.get_page_count(SV.url))
+    T = Topic('https://www.vauva.fi/keskustelu/alue/aihe_vapaa')
+    #Posts = T.GetTopics('https://www.vauva.fi/keskustelu/alue/aihe_vapaa')
+    #return Posts
+    url = 'https://www.vauva.fi/keskustelu/2911061/typerien-ja-nolojen-kysymysten-ketju-kysy-mita-vain-muut-vastaavat-ilman?changed=1583141686'
+    return T.GetTopic(url)
+Posts = Scraping()
